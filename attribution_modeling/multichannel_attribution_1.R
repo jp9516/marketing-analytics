@@ -1,3 +1,5 @@
+# Simple version of online multichannel attribution model plus larger simulated dataset
+
 ## Initial example of looking at attribution modeling
 library(tidyverse)
 library(reshape2)
@@ -9,7 +11,7 @@ library(markovchain)
 # creating a data sample
 df1 <- data.frame(path = c('c1 > c2 > c3', 'c1', 'c2 > c3'), conv = c(1, 0, 0), conv_null = c(0, 1, 1))
 
-# calculating the models
+# calculating the first order markov chain model
 mod1 <- markov_model(df1,
                      var_path = 'path',
                      var_conv = 'conv',
@@ -19,9 +21,10 @@ mod1 <- markov_model(df1,
 # extracting the results of attribution
 df_res1 <- mod1$result
 
-# extracting a transition matrix
+# extracting the transition matrix
 df_trans1 <- mod1$transition_matrix
-df_trans1 <- dcast(df_trans1, channel_from ~ channel_to, value.var = 'transition_probability')
+df_trans1 <- df_trans1 %>%
+  spread(channel_to, transition_probability)
 
 ### plotting the Markov graph ###
 df_trans <- mod1$transition_matrix
@@ -30,6 +33,8 @@ df_trans <- mod1$transition_matrix
 df_dummy <- data.frame(channel_from = c('(start)', '(conversion)', '(null)'),
                        channel_to = c('(start)', '(conversion)', '(null)'),
                        transition_probability = c(0, 1, 1))
+
+# row bind, initially a union
 df_trans <- rbind(df_trans, df_dummy)
 
 # ordering channels
@@ -37,7 +42,8 @@ df_trans$channel_from <- factor(df_trans$channel_from,
                                 levels = c('(start)', '(conversion)', '(null)', 'c1', 'c2', 'c3'))
 df_trans$channel_to <- factor(df_trans$channel_to,
                               levels = c('(start)', '(conversion)', '(null)', 'c1', 'c2', 'c3'))
-df_trans <- dcast(df_trans, channel_from ~ channel_to, value.var = 'transition_probability')
+df_trans <- df_trans %>%
+  spread(channel_to, transition_probability)
 
 # creating the markovchain object
 trans_matrix <- matrix(data = as.matrix(df_trans[, -1]),
@@ -77,7 +83,6 @@ mod2 <- markov_model(df2,
 # heuristic_models() function doesn't work for me, therefore I used the manual calculations
 # instead of:
 #h_mod2 <- heuristic_models(df2, var_path = 'path', var_conv = 'conv')
-
 df_hm <- df2 %>%
   mutate(channel_name_ft = sub('>.*', '', path),
          channel_name_ft = sub(' ', '', channel_name_ft),
@@ -132,18 +137,9 @@ ggplot(df_plot_trans, aes(y = channel_from, x = channel_to, fill = transition_pr
 all_mod_plot <- melt(all_models, id.vars = 'channel_name', variable.name = 'conv_type')
 all_mod_plot$value <- round(all_mod_plot$value)
 # slope chart
-pal <- colorRampPalette(brewer.pal(10, "Set1"))
 ggplot(all_mod_plot, aes(x = conv_type, y = value, group = channel_name)) +
-  theme_solarized(base_size = 18, base_family = "", light = TRUE) +
-  scale_color_manual(values = pal(10)) +
-  scale_fill_manual(values = pal(10)) +
   geom_line(aes(color = channel_name), size = 2.5, alpha = 0.8) +
   geom_point(aes(color = channel_name), size = 5) +
-  geom_label_repel(aes(label = paste0(channel_name, ': ', value), fill = factor(channel_name)),
-                   alpha = 0.7,
-                   fontface = 'bold', color = 'white', size = 5,
-                   box.padding = unit(0.25, 'lines'), point.padding = unit(0.5, 'lines'),
-                   max.iter = 100) +
   theme(legend.position = 'none',
         legend.title = element_text(size = 16, color = 'black'),
         legend.text = element_text(size = 16, vjust = 2, color = 'black'),
